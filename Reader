@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<style>
+pre {
+	display: inline-block;
+	margin: 0;
+}
+
+input.inputClass {
+	font-size: 80%;
+	width: 75px;
+}
+
+div.myclass {
+	font-size: 80%;
+	display: inline-block;
+	width: 175px;
+	text-align: right;
+}
+
+table.center {
+	margin-left: auto;
+	margin-right: auto;
+}
+
+textarea {
+	font-size: 80%;
+	}
+
+
+</style>
+
+<p><a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-sa/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/">Creative Commons Attribution-ShareAlike 4.0 International License</a>. </p>
+
+		<input type="file" id="fileInput" onChange="uploadRequest()"/><br>
+		<div class="container1" id="container"></div>
+</head>
+<body>
+	<center>
+		<hr><br>
+		<table class="center">
+			<tr>
+				<td>
+					<center>
+					<textarea id="xml-val">(your resultant XML data previewed here...)</textarea>
+					<br>
+					<input 	type="button" 
+							id="dwn-btn-xml" 
+							value="Download LandXML Result" 
+							onClick="download('landXML.xml','xml-val')"/>
+					</center>
+				</td>
+				<td>
+					<center>
+					<textarea id="csv-val">(your resultant CSV data previewed here...)</textarea>
+					<br>
+					<input 	type="button" 
+							id="dwn-btn-csv" 
+							value="Download CSV Result"
+							onClick="download('landXML.csv','csv-val')"/>
+					</center>
+				</td>
+			</tr>
+		</table>
+		<p id="demo"></p>
+	</center>
+<script>
+
+
+	// Get file from fileInput, read it, and store it
+	function uploadRequest(){
+		var myFile = document.getElementById("fileInput").files[0];
+		const reader = new FileReader();
+		reader.onload = function fileReadCompleted() {
+			parseXML(reader.result);
+			}
+		reader.readAsText(myFile);
+		//document.getElementById("fileInput").value = ""; // save memory
+		}
+
+	// Get and parse DOM of XML file
+	function parseXML(fileText){
+		parser = new DOMParser();
+		xmlDoc = parser.parseFromString(fileText,"text/xml");
+		var s = new XMLSerializer();
+		popFields(xmlDoc);
+		displayCSV("CSV Output Coming Soon!");
+		displayXML(s.serializeToString(xmlDoc));
+		}
+
+	// Edit the DOM before passing back to the parse function	
+	function popFields(doc){
+		x = doc.getElementsByTagName("PipeNetwork");
+		xLen = x.length;
+		clearFields();
+		for (var i = 0; i <xLen; i++){
+			if (x[i].nodeType == 1){
+				var labels = [];
+				var values = [];
+				var net = x[i].attributes.getNamedItem("name").nodeValue;
+				var y = x[i].getElementsByTagName("CircPipe");
+				if (y[0] == undefined)
+				var y = x[i].getElementsByTagName("RectPipe");
+				var attr = y[0].attributes
+				labels.push("Network");
+				values.push(net);
+				for (var j = attr.length-1; j>-1; j--){
+					var nam = y[0].attributes[j].name;
+					var val = y[0].attributes[j].nodeValue;
+					labels.push(nam);
+					values.push(val);
+					}
+				addField(labels,values);
+				}
+			}
+		}
+
+	// Clear the fields 
+	function clearFields(){
+		var container = document.getElementById("container");
+		var numSubs = container.childNodes.length;
+		for (var i=0 ; i<numSubs; i++){
+			container.firstChild.remove();
+			}
+		}
+
+	// Add a row of fields
+	function addField(labels,values){ //first element should be a unique id... because I am a bad programmer
+		if (labels.length != values.length) alert("#labels doesn't equal #values!"); // hey look an error message
+		var container = document.getElementById("container");
+		subcontainer = document.createElement("div");
+		container.appendChild(subcontainer);
+		var butt = subcontainer.appendChild(document.createElement("button"));
+		var buttText = butt.appendChild(document.createTextNode("Circ/Rect"));
+		var butt2 = subcontainer.appendChild(document.createElement("button"));
+		var buttText2 = butt2.appendChild(document.createTextNode("Simplify"));
+		butt.id = values[0] + "_Button"
+		butt2.id = values[0] + "_ButtonSimp"
+		butt.onclick =  function(){changePipe(values[0])};
+		butt2.onclick = function(){simplify(  values[0]);};
+		for(var i=0; i<labels.length; i++){
+		addFieldElement(labels[i],values[i],values[0])}
+		}
+
+	// Add a single text box with a label
+	function addFieldElement(n,e,id){
+		var txt = n + ": ";
+		var input = document.createElement("input");
+		input.id = id + "_" + n;
+		input.value = e;
+		input.className = "inputClass";
+		input.onchange = function(){editXML(id,n);};
+		subsubcontainer = subcontainer.appendChild(document.createElement("div"));
+		subsubcontainer.className = "myclass";
+		subsubcontainer.appendChild(document.createTextNode(txt));
+		subsubcontainer.appendChild(input);
+		}
+
+	// Change Pipe Network Type within the DOM
+	function changePipe(id){
+		var ns = xmlDoc.lookupNamespaceURI(null); // gotta make elements in the right namespace
+		var s = new XMLSerializer();
+		var x = xmlDoc.getElementsByTagName("PipeNetwork");
+		var xLen = x.length;
+		for (var i = 0; i <xLen; i++){ // Loop thru Pipe Networks
+			if ((x[i].nodeType == 1) && (x[i].attributes.getNamedItem("name").nodeValue == id)){ // Filter out all NETWORKS except the one with name == id
+				var y = x[i].getElementsByTagName("Pipe"); // Get Each Pipe in Network x[i]
+				var z = [];
+				var yLen = y.length;
+				for (j = 0; j<yLen; j++){   									// I can't get renameNodes() working, so we gotta do it like this.
+					z[j] = y[j].childNodes[1];  								// Get the Circ/Rect Pipe from Each Pipe
+					if (z[j].nodeName == "CircPipe")							// 	If Circ Pipe...
+						var newPipe = xmlDoc.createElementNS(ns,"RectPipe"); 	// 					...Then make a new Rect Pipe Node (in the current namespace)
+					else if (z[0].nodeName == "RectPipe")						// 	If Rect Pipe...
+						var newPipe = xmlDoc.createElementNS(ns,"CircPipe"); 	// 					..Then make a new Circ Pipe Node
+					else alert("Error: only currently accepting Circular and Rectangular Pipes"); // Look at me! Writing another error code.
+					var attr = z[j].attributes; 																			// Get the attributes for the Circ/Rect Pipe
+					var flag = 0; 																							// Flag used to not change dia to ht/wt and then back again
+					for (var k = 0; k<attr.length; k++){
+						if ((attr[k].nodeName == "diameter") && (flag != "hw")) {											// Don't copy the diameter attribute, instead copy blank ht/wt
+							newPipe.setAttribute("height","");
+							newPipe.setAttribute("width","");
+							flag = "d";																						// Flag this pipe as having originally been circular
+							continue;																						// Slight optimization
+							}
+						if (((attr[k].nodeName == "height") || (attr[k].nodeName == "width")) && (flag != "d")){			// Don't copy the height/width attribute, instead copy blank dia
+							newPipe.setAttribute("diameter","");
+							flag = "hw";																					// Flag this pipe as having originally been rectangular
+							continue;
+							}
+						newPipe.setAttribute(attr[k].nodeName,attr[k].nodeValue); 											// Set attribute values
+						}
+					y[j].replaceChild(newPipe,z[j]);																		// Replace the Circ/Rect Pipe with the new Pipe Node
+					}
+				}
+			}
+		displayXML(s.serializeToString(xmlDoc));
+		popFields(xmlDoc);
+		}
+
+	// Simplify Network
+	function simplify(id){
+		var dsStr = removeNodes(id);
+		}
+	
+	function removeNodes(id){
+		var s = new XMLSerializer();
+		var n = xmlDoc.getElementsByTagName("PipeNetwork");
+		var nLen = n.length;
+		for (var i = 0; i <nLen; i++){ // Loop thru Pipe Networks
+			if ((n[i].nodeType == 1) && (n[i].attributes.getNamedItem("name").nodeValue == id)){ // Filter out all NETWORKS except the one with name == id
+				var p = n[i].getElementsByTagName("Pipe"); // Get Each Pipe in Network n[i]
+				var s = n[i].getElementsByTagName("Structures"); // Get Each Structure in Network 
+				var z = [];
+				var pLen = p.length;
+				for (j = 0; j<pLen; j++){
+					return "Peaches";
+					}
+				}
+			}
+		}
+	
+	// Dynamically Edit DOM
+	function editXML(id,n){
+		var s = new XMLSerializer();
+		var x = xmlDoc.getElementsByTagName("PipeNetwork");
+		var xLen = x.length;
+		var inputID = id + "_" + n;
+		var inp = document.getElementById(inputID);
+		var val = inp.value;
+		for (var i = 0; i <xLen; i++){
+			loopIF:
+			if ((x[i].nodeType == 1) && (x[i].attributes.getNamedItem("name").nodeValue == id)){
+				if (n == "Network"){
+					x[i].attributes.getNamedItem("name").nodeValue=inp.value;
+					break;
+					}
+				var y = x[i].getElementsByTagName("CircPipe");
+				if (y[0] == undefined)
+				var y = x[i].getElementsByTagName("RectPipe");
+				for(var j=0; j<y.length; j++){
+					y[j].attributes.getNamedItem(n).nodeValue=val;
+					}
+				break loopIF;
+				}
+			}
+		displayXML(s.serializeToString(xmlDoc));
+		popFields(xmlDoc);
+		}
+
+	// Pass finished XML data to textArea
+	function displayXML(str){
+		var str = str.replaceAll("&","&amp;");
+		document.getElementById("xml-val").innerHTML = str;
+		}
+
+	// Pass finished CSV data to textArea
+	function displayCSV(str){
+		var str = str.replaceAll("<br>","\n");
+		document.getElementById("csv-val").innerHTML = str;
+		}
+
+	// Pass info to downloader
+	function download(filename, text){
+		var text = document.getElementById(text).value;
+		var element = document.createElement('a');
+		element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(text));
+		element.setAttribute('download', filename);
+		element.style.display = 'none';
+		document.body.appendChild(element);
+		element.click();
+		document.body.removeChild(element);
+		}
+
+
+</script>
+
+<br><br><br><br><br><br><br><br><br><br><br><br><br>
+
+</body>
+</html>
